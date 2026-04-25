@@ -598,7 +598,7 @@ export default function Index() {
                 Если у вас возникли проблемы с модом, вопросы по публикации или предложения — напишите нам. Мы стараемся отвечать в течение 24 часов.
               </p>
               <a
-                href="https://www.donationalerts.com/r/evgenii_bulg25"
+                href="https://vk.me/join/Lctd10kKM6Wk28YhJiqTnrWOgFwVDON4MhY="
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[rgba(255,255,255,0.1)] text-gray-400 hover:text-white hover:border-[rgba(255,107,0,0.3)] hover:bg-[rgba(255,107,0,0.05)] transition-all duration-200 text-sm font-orbitron"
