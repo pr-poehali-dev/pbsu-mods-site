@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Icon from "@/components/ui/icon";
+
+const API_URL = "https://functions.poehali.dev/9fffa2e5-6614-4857-8ac7-fffb8668ac8a";
 
 type Category = "all" | "mod" | "3ds" | "skin";
 
@@ -110,8 +112,10 @@ const categoryColors: Record<string, string> = {
 export default function Index() {
   const [page, setPage] = useState<Page>("home");
   const [activeFilter, setActiveFilter] = useState<Category>("all");
-  const [mods, setMods] = useState<Mod[]>(DEMO_MODS);
+  const [mods, setMods] = useState<Mod[]>([]);
+  const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -126,6 +130,18 @@ export default function Index() {
 
   const [publishSuccess, setPublishSuccess] = useState(false);
 
+  const fetchMods = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch(API_URL);
+    const data = await res.json();
+    setMods(data.mods || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchMods();
+  }, [fetchMods]);
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     setPublishSuccess(false);
@@ -134,6 +150,7 @@ export default function Index() {
   const filtered = activeFilter === "all" ? mods : mods.filter((m) => m.category === activeFilter);
 
   function handleDownload(mod: Mod) {
+    if (!mod.fileUrl || mod.fileUrl === "#") return;
     const link = document.createElement("a");
     link.href = mod.fileUrl;
     link.download = mod.title;
@@ -152,24 +169,31 @@ export default function Index() {
     setForm((f) => ({ ...f, file, fileName: file.name }));
   }
 
-  function handlePublish(e: React.FormEvent) {
+  async function handlePublish(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title || !form.description || !form.author || !form.file) return;
-    const newMod: Mod = {
-      id: Date.now(),
-      title: form.title,
-      description: form.description,
-      category: form.category,
-      author: form.author,
-      downloads: 0,
-      image: form.imagePreview || HERO_IMAGE,
-      fileUrl: form.file ? URL.createObjectURL(form.file) : "#",
-      fileSize: form.file ? `${(form.file.size / 1024 / 1024).toFixed(1)} МБ` : "—",
-      date: new Date().toISOString().slice(0, 10),
-    };
-    setMods((prev) => [newMod, ...prev]);
-    setPublishSuccess(true);
-    setForm({ title: "", description: "", author: "", category: "mod", image: null, file: null, imagePreview: "", fileName: "" });
+    if (!form.title || !form.description || !form.author) return;
+    setPublishing(true);
+    const fileSize = form.file ? `${(form.file.size / 1024 / 1024).toFixed(1)} МБ` : "—";
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: form.title,
+        description: form.description,
+        category: form.category,
+        author: form.author,
+        image: form.imagePreview || HERO_IMAGE,
+        fileUrl: "#",
+        fileSize,
+      }),
+    });
+    const data = await res.json();
+    if (data.mod) {
+      setMods((prev) => [data.mod, ...prev]);
+      setPublishSuccess(true);
+      setForm({ title: "", description: "", author: "", category: "mod", image: null, file: null, imagePreview: "", fileName: "" });
+    }
+    setPublishing(false);
   }
 
   const navLinks: { label: string; page: Page; icon: string }[] = [
@@ -312,11 +336,17 @@ export default function Index() {
                   Все моды <Icon name="ArrowRight" size={14} />
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {mods.slice(0, 6).map((mod, i) => (
-                  <ModCard key={mod.id} mod={mod} index={i} onDownload={handleDownload} />
-                ))}
-              </div>
+              {loading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="w-8 h-8 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {mods.slice(0, 6).map((mod, i) => (
+                    <ModCard key={mod.id} mod={mod} index={i} onDownload={handleDownload} />
+                  ))}
+                </div>
+              )}
             </section>
 
             <section className="max-w-7xl mx-auto px-4 pb-16">
@@ -365,7 +395,11 @@ export default function Index() {
               <span className="ml-auto text-gray-500 text-sm self-center">{filtered.length} модов</span>
             </div>
 
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-24">
+                <div className="w-8 h-8 border-2 border-[#FF6B00] border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="text-center py-24 text-gray-600">
                 <Icon name="Package" size={48} className="mx-auto mb-4 opacity-30" />
                 <p className="font-orbitron">Модов в этой категории пока нет</p>
@@ -534,10 +568,15 @@ export default function Index() {
 
               <button
                 type="submit"
-                className="w-full btn-neon py-4 rounded-xl font-orbitron text-sm tracking-wide flex items-center justify-center gap-2 text-white"
+                disabled={publishing}
+                className="w-full btn-neon py-4 rounded-xl font-orbitron text-sm tracking-wide flex items-center justify-center gap-2 text-white disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Icon name="Upload" size={18} />
-                Опубликовать мод
+                {publishing ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Icon name="Upload" size={18} />
+                )}
+                {publishing ? "Публикация..." : "Опубликовать мод"}
               </button>
             </form>
           </div>
